@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DXF-Schlüsselanhänger-Generator</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+      }
+    }
+  </script>
+  <style>
+    :root { color-scheme: light; }
+    body { background: #f3f5f7; color: #152a25; }
+    .panel { background: #fff; border: 1px solid #e2e8e5; border-radius: 1rem; box-shadow: 0 12px 35px rgba(18, 45, 36, .07); }
+    .field { width: 100%; border: 1px solid #d8e4df; border-radius: .65rem; padding: .65rem .8rem; background: #f7fbf9; color: #17352c; }
+    .field:focus { outline: 2px solid #8bd9b8; outline-offset: 1px; }
+    .label { display: block; margin-bottom: .4rem; font-size: .9rem; font-weight: 600; color: #27483d; }
+    .unit { color: #648176; font-size: .85rem; }
+    .btn-primary { background: #059669; color: #fff; }
+    .btn-primary:hover { background: #047857; }
+    .btn-primary:disabled { opacity: .5; cursor: wait; }
+    .preview-grid { background-color: #fff; background-image: linear-gradient(#e8efec 1px, transparent 1px), linear-gradient(90deg, #e8efec 1px, transparent 1px); background-size: 20px 20px; }
+    input[type="range"] { accent-color: #059669; }
+    @media (min-width: 1024px) {
+      .preview-panel { position: sticky; top: 1rem; align-self: start; }
+    }
+    @media (min-width: 320px) and (max-width: 1023px) {
+      .generator-grid { grid-template-columns: minmax(90px, 2fr) minmax(0, 3fr); gap: .75rem; align-items: start; }
+      .generator-grid > .preview-panel,
+      .generator-grid > .settings-panel { grid-column: auto; position: sticky; top: .5rem; max-height: calc(100vh - 12rem); overflow-y: auto; align-self: start; }
+      .generator-grid > .preview-panel { padding: .75rem; }
+      .generator-grid > .settings-panel { padding: .9rem; }
+      .preview-panel .preview-grid { min-height: 0; padding: .4rem; }
+      .preview-panel .preview-grid svg { max-height: 12rem; }
+    }
+    @media (min-width: 320px) and (max-width: 559px) {
+      .generator-grid { grid-template-columns: minmax(90px, 2fr) minmax(0, 3fr); gap: .5rem; }
+      .generator-grid > .settings-panel .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+      .generator-grid > .settings-panel .col-span-2 { grid-column: auto; }
+      .preview-panel .mt-4.flex { display: none; }
+      .preview-panel .flex.items-center.justify-between { align-items: flex-start; flex-direction: column; }
+      .preview-panel h2 { font-size: 1rem; }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+</head>
+<body class="min-h-screen">
+  <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+    <header class="mb-7">
+      <p class="text-sm font-semibold tracking-widest uppercase text-green-700">DXF- &amp; STL-Generator</p>
+      <h1 class="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">Dein Schlüsselanhänger</h1>
+      <p class="mt-2 text-gray-600">Text eingeben, Maße in Millimetern festlegen und eine DXF- oder STL-Datei für CAD, CNC, Laser oder 3D-Druck herunterladen.</p>
+    </header>
+
+    <div class="generator-grid grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <section class="panel preview-panel lg:col-span-3 p-4 sm:p-6" aria-label="Vorschau">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold">Vorschau</h2>
+            <p class="text-sm text-gray-500">Außenkontur und Textkonturen</p>
+          </div>
+          <span id="dimensionLabel" class="text-sm text-gray-600"></span>
+        </div>
+        <div class="preview-grid rounded-xl border border-gray-200 overflow-hidden min-h-64 flex items-center justify-center p-5">
+          <svg id="preview" viewBox="0 0 900 420" class="w-full max-h-96" role="img" aria-label="Vorschau des Schlüsselanhängers"></svg>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-600">
+          <span class="inline-flex items-center"><i class="w-3 h-3 rounded-sm bg-green-200 border border-green-700 mr-2"></i>Bauteil / Außenkontur</span>
+          <span class="inline-flex items-center"><i class="w-3 h-3 border-2 border-purple-600 mr-2"></i>Textkonturen (Layer TEXT)</span>
+          <span class="inline-flex items-center"><i class="w-3 h-3 rounded-full border-2 border-red-600 mr-2"></i>Befestigungsloch</span>
+        </div>
+      </section>
+
+      <section class="panel settings-panel lg:col-span-2 p-5 sm:p-6" aria-label="Einstellungen">
+        <h2 class="text-lg font-semibold mb-5">Einstellungen</h2>
+        <div class="space-y-5">
+          <div>
+            <label class="label" for="textInput">Text</label>
+            <input class="field text-lg" id="textInput" type="text" maxlength="40" value="Example" autocomplete="off">
+            <p class="mt-1 text-xs text-gray-500">Einzeilig, maximal 40 Zeichen.</p>
+          </div>
+
+          <div>
+            <label class="label" for="fontSelect">Schriftart</label>
+            <select class="field" id="fontSelect">
+              <option value="lobster">Lobster</option>
+              <option value="anton">Anton</option>
+              <option value="plex">IBM Plex Sans</option>
+              <option value="upload">Eigene TTF-/OTF-Datei …</option>
+            </select>
+            <input id="fontFile" class="hidden mt-2" type="file" accept=".ttf,.otf,font/ttf,font/otf">
+            <p id="fontStatus" class="mt-1 text-xs text-gray-500" aria-live="polite">Lade Schriftart …</p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label" for="widthInput">Max. Gesamtbreite</label>
+              <div class="relative"><input class="field pr-10" id="widthInput" type="number" min="20" max="250" step="1" value="100"><span class="unit absolute right-3 top-3">mm</span></div>
+            </div>
+            <div>
+              <label class="label" for="heightInput">Max. Gesamthöhe</label>
+              <div class="relative"><input class="field pr-10" id="heightInput" type="number" min="15" max="150" step="1" value="36"><span class="unit absolute right-3 top-3">mm</span></div>
+            </div>
+          </div>
+
+          <div>
+            <label class="label" for="marginInput">Rand / Konturabstand</label>
+            <div class="relative"><input class="field pr-10" id="marginInput" type="number" min="1" max="15" step="0.5" value="3"><span class="unit absolute right-3 top-3">mm</span></div>
+            <p class="mt-1 text-xs text-gray-500">Schrift bleibt proportional; Breite und Höhe sind Maximalmaße. Getrennte Zeichen werden zu einem Bauteil verbunden.</p>
+          </div>
+
+          <div>
+            <label class="label" for="letterSpacing">Zusätzlicher Zeichenabstand</label>
+            <div class="relative"><input class="field pr-10" id="letterSpacing" type="number" min="0" max="10" step="0.25" value="0"><span class="unit absolute right-3 top-3">mm</span></div>
+            <p class="mt-1 text-xs text-gray-500">Wird zum natürlichen Abstand der Schrift hinzugefügt.</p>
+          </div>
+
+          <div class="border-t border-gray-200 pt-5">
+            <h3 class="font-semibold mb-3">Befestigungsloch</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="label" for="holeDiameter">Lochdurchmesser</label>
+                <div class="relative"><input class="field pr-10" id="holeDiameter" type="number" min="2" max="15" step="0.5" value="4"><span class="unit absolute right-3 top-3">mm</span></div>
+              </div>
+              <div>
+                <label class="label" for="holeWall">Wandstärke am Loch</label>
+                <div class="relative"><input class="field pr-10" id="holeWall" type="number" min="1" max="10" step="0.5" value="2.5"><span class="unit absolute right-3 top-3">mm</span></div>
+              </div>
+              <div class="col-span-2">
+                <label class="label" for="holeDistance">Abstand Lochmitte zur Textkontur</label>
+                <div class="relative"><input class="field pr-10" id="holeDistance" type="number" min="0" max="30" step="0.5" value="4.5"><span class="unit absolute right-3 top-3">mm</span></div>
+              </div>
+            </div>
+            <div class="mt-4">
+              <div class="flex items-center justify-between">
+                <label class="label mb-0" for="holeAngle">Lochposition</label>
+                <span id="angleLabel" class="unit">140°</span>
+              </div>
+              <input id="holeAngle" class="w-full mt-2" type="range" min="0" max="359" value="140">
+              <p class="mt-1 text-xs text-gray-500">Winkel um den Text: 0° rechts, 90° oben, 180° links.</p>
+            </div>
+          </div>
+
+          <div class="border-t border-gray-200 pt-5">
+            <h3 class="font-semibold mb-3">3D-Druck / STL</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="label" for="partHeight">Bauteilhöhe</label>
+                <div class="relative"><input class="field pr-10" id="partHeight" type="number" min="1" max="30" step="0.5" value="3"><span class="unit absolute right-3 top-3">mm</span></div>
+              </div>
+              <div>
+                <label class="label" for="textRaise">Texterhöhung</label>
+                <div class="relative"><input class="field pr-10" id="textRaise" type="number" min="0.2" max="10" step="0.2" value="1"><span class="unit absolute right-3 top-3">mm</span></div>
+              </div>
+            </div>
+            <p class="mt-2 text-xs text-gray-500">Die Texterhöhung kommt zusätzlich auf die Bauteilhöhe.</p>
+          </div>
+        </div>
+
+        <p id="message" class="mt-5 text-sm min-h-5" role="status" aria-live="polite"></p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+          <button id="downloadButton" class="btn-primary rounded-lg py-3 px-4 font-semibold transition" type="button" disabled>DXF herunterladen</button>
+          <button id="stlButton" class="btn-primary rounded-lg py-3 px-4 font-semibold transition" type="button" disabled>STL herunterladen</button>
+        </div>
+        <p class="mt-3 text-xs text-gray-500">AutoCAD-R12-DXF · Koordinaten in mm · Layer <code>CUT</code> für Kontur/Loch, Layer <code>TEXT</code> für Textkonturen.</p>
+        <p class="mt-2 text-xs text-gray-500">STL: Bauteil mit durchgehendem Befestigungsloch und erhabenem Text; beide Höhen sind in mm.</p>
+      </section>
+    </div>
+
+    <p class="mt-5 text-xs text-gray-500">Für Schriften und Geometrie werden Bibliotheken über jsDelivr geladen; die 3D-Bibliothek wird beim ersten STL-Export nachgeladen. DXF und STL werden lokal im Browser erstellt.</p>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const CLIPPER_SCALE = 1000;
+      const FONT_URLS = {
+        lobster: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/lobster/Lobster-Regular.ttf",
+        anton: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/anton/Anton-Regular.ttf",
+        plex: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ibmplexsans/IBMPlexSans%5Bwdth,wght%5D.ttf"
+      };
+      const FONT_LABELS = { lobster: "Lobster", anton: "Anton", plex: "IBM Plex Sans" };
+      const $ = (id) => document.getElementById(id);
+      const controls = ["textInput", "widthInput", "heightInput", "marginInput", "letterSpacing", "holeDiameter", "holeWall", "holeDistance", "holeAngle"];
+      let activeFont = null;
+      let activeFontName = "";
+      let renderTimer = 0;
+      let latestGeometry = null;
+      let stlModulesPromise = null;
+
+      function setMessage(text, isError = false) {
+        const node = $("message");
+        node.textContent = text;
+        node.className = `mt-5 text-sm min-h-5 ${isError ? "text-red-700" : "text-green-800"}`;
+      }
+
+      function readSettings() {
+        const settings = {
+          text: $("textInput").value.trim(),
+          width: Number($("widthInput").value),
+          height: Number($("heightInput").value),
+          margin: Number($("marginInput").value),
+          letterSpacing: Number($("letterSpacing").value),
+          holeDiameter: Number($("holeDiameter").value),
+          holeWall: Number($("holeWall").value),
+          holeDistance: Number($("holeDistance").value),
+          angle: Number($("holeAngle").value)
+        };
+        const limits = [
+          ["width", 20, 250, "Die Gesamtbreite muss zwischen 20 und 250 mm liegen."],
+          ["height", 15, 150, "Die Gesamthöhe muss zwischen 15 und 150 mm liegen."],
+          ["margin", 1, 15, "Der Rand muss zwischen 1 und 15 mm liegen."],
+          ["letterSpacing", 0, 10, "Der zusätzliche Zeichenabstand muss zwischen 0 und 10 mm liegen."],
+          ["holeDiameter", 2, 15, "Der Lochdurchmesser muss zwischen 2 und 15 mm liegen."],
+          ["holeWall", 1, 10, "Die Wandstärke muss zwischen 1 und 10 mm liegen."],
+          ["holeDistance", 0, 30, "Der Lochabstand muss zwischen 0 und 30 mm liegen."]
+        ];
+        if (!settings.text) throw new Error("Bitte gib einen Text ein.");
+        for (const [key, min, max, message] of limits) {
+          if (!Number.isFinite(settings[key]) || settings[key] < min || settings[key] > max) throw new Error(message);
+        }
+        if (settings.width <= settings.holeDiameter + settings.holeWall * 2 || settings.height <= settings.holeDiameter + settings.holeWall * 2) {
+          throw new Error("Die Maße sind für das Befestigungsloch und seine Wandstärke zu klein.");
+        }
+        return settings;
+      }
+
+      async function loadPresetFont(name) {
+        if (!window.opentype || !window.ClipperLib) throw new Error("Eine benötigte Bibliothek konnte nicht geladen werden. Prüfe die Internetverbindung und lade die Seite neu.");
+        $("fontStatus").textContent = "Lade Schriftart …";
+        const response = await fetch(FONT_URLS[name]);
+        if (!response.ok) throw new Error(`Die Schriftart konnte nicht geladen werden (HTTP ${response.status}).`);
+        const buffer = await response.arrayBuffer();
+        activeFont = opentype.parse(buffer);
+        activeFontName = FONT_LABELS[name] || name;
+        $("fontStatus").textContent = "Schriftart bereit.";
+      }
+
+      async function loadUploadedFont(file) {
+        if (!window.opentype || !window.ClipperLib) throw new Error("Eine benötigte Bibliothek konnte nicht geladen werden. Prüfe die Internetverbindung und lade die Seite neu.");
+        if (!file) return;
+        latestGeometry = null;
+        $("downloadButton").disabled = true;
+        $("fontStatus").textContent = "Lese eigene Schriftart …";
+        try {
+          activeFont = opentype.parse(await file.arrayBuffer());
+          activeFontName = file.name.replace(/\.(ttf|otf)$/i, "");
+          $("fontStatus").textContent = `Eigene Schriftart: ${file.name}`;
+          scheduleRender();
+        } catch (error) {
+          activeFont = null;
+          $("fontStatus").textContent = "Die Datei ist keine lesbare TTF-/OTF-Schrift.";
+          setMessage("Die Schriftdatei konnte nicht gelesen werden. Bitte wähle eine gültige TTF- oder OTF-Datei.", true);
+        }
+      }
+
+      function pathToContours(commands, segments = 24) {
+        const contours = [];
+        let contour = [];
+        let current = { x: 0, y: 0 };
+        let start = null;
+        const pushContour = () => {
+          if (contour.length >= 3) contours.push(contour);
+          contour = [];
+        };
+        const add = (point) => {
+          const last = contour[contour.length - 1];
+          if (!last || Math.hypot(point.x - last.x, point.y - last.y) > 1e-7) contour.push(point);
+        };
+        for (const command of commands) {
+          if (command.type === "M") {
+            pushContour();
+            current = { x: command.x, y: command.y };
+            start = current;
+            add(current);
+          } else if (command.type === "L") {
+            current = { x: command.x, y: command.y };
+            add(current);
+          } else if (command.type === "Q") {
+            const from = current;
+            for (let i = 1; i <= segments; i++) {
+              const t = i / segments, u = 1 - t;
+              add({
+                x: u * u * from.x + 2 * u * t * command.x1 + t * t * command.x,
+                y: u * u * from.y + 2 * u * t * command.y1 + t * t * command.y
+              });
+            }
+            current = { x: command.x, y: command.y };
+          } else if (command.type === "C") {
+            const from = current;
+            for (let i = 1; i <= segments; i++) {
+              const t = i / segments, u = 1 - t;
+              add({
+                x: u ** 3 * from.x + 3 * u * u * t * command.x1 + 3 * u * t * t * command.x2 + t ** 3 * command.x,
+                y: u ** 3 * from.y + 3 * u * u * t * command.y1 + 3 * u * t * t * command.y2 + t ** 3 * command.y
+              });
+            }
+            current = { x: command.x, y: command.y };
+          } else if (command.type === "Z") {
+            pushContour();
+            if (start) current = start;
+            start = null;
+          }
+        }
+        pushContour();
+        return contours;
+      }
+
+      function toClipperPath(points) {
+        return points.map((point) => ({ X: Math.round(point.x * CLIPPER_SCALE), Y: Math.round(point.y * CLIPPER_SCALE) }));
+      }
+
+      function booleanUnion(paths) {
+        const clipper = new ClipperLib.Clipper();
+        clipper.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
+        const solution = new ClipperLib.Paths();
+        const succeeded = clipper.Execute(
+          ClipperLib.ClipType.ctUnion,
+          solution,
+          ClipperLib.PolyFillType.pftNonZero,
+          ClipperLib.PolyFillType.pftNonZero
+        );
+        if (!succeeded || solution.length === 0) throw new Error("Die Textkonturen konnten nicht berechnet werden.");
+        return solution;
+      }
+
+      function connectComponents(paths, bridgeRadius) {
+        let connected = paths;
+        while (connected.length > 1) {
+          let nearest = null;
+          let nearestDistance = Infinity;
+          for (let i = 0; i < connected.length; i++) {
+            for (let j = i + 1; j < connected.length; j++) {
+              for (const first of connected[i]) {
+                for (const second of connected[j]) {
+                  const dx = first.X - second.X, dy = first.Y - second.Y;
+                  const distance = dx * dx + dy * dy;
+                  if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearest = [first, second];
+                  }
+                }
+              }
+            }
+          }
+          if (!nearest) throw new Error("Die getrennten Konturen konnten nicht verbunden werden.");
+          const bridgeOffset = new ClipperLib.ClipperOffset(2, 0.05 * CLIPPER_SCALE);
+          bridgeOffset.AddPath(nearest, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etOpenRound);
+          const bridge = new ClipperLib.Paths();
+          bridgeOffset.Execute(bridge, Math.round(bridgeRadius * CLIPPER_SCALE));
+          if (!bridge.length) throw new Error("Die Verbindung zwischen den Konturen konnte nicht erstellt werden.");
+          connected = booleanUnion([...connected, ...bridge]);
+        }
+        return connected;
+      }
+
+      function boundsOf(paths) {
+        const points = paths.flat();
+        if (!points.length) throw new Error("Für diesen Text wurden keine Konturen gefunden.");
+        return {
+          minX: Math.min(...points.map(p => p.X)),
+          maxX: Math.max(...points.map(p => p.X)),
+          minY: Math.min(...points.map(p => p.Y)),
+          maxY: Math.max(...points.map(p => p.Y))
+        };
+      }
+
+      function pointOnBounds(paths, degrees) {
+        const angle = degrees * Math.PI / 180;
+        const dx = Math.cos(angle), dy = -Math.sin(angle);
+        const bounds = boundsOf(paths);
+        const cx = (bounds.minX + bounds.maxX) / 2, cy = (bounds.minY + bounds.maxY) / 2;
+        let farthestDistance = -Infinity;
+        let intersection = null;
+        for (const path of paths) {
+          for (let i = 0; i < path.length; i++) {
+            const start = path[i], end = path[(i + 1) % path.length];
+            const sx = end.X - start.X, sy = end.Y - start.Y;
+            const px = start.X - cx, py = start.Y - cy;
+            const denominator = dx * sy - dy * sx;
+            if (Math.abs(denominator) < 1e-9) continue;
+            const distance = (px * sy - py * sx) / denominator;
+            const segmentPosition = (px * dy - py * dx) / denominator;
+            if (distance >= 0 && segmentPosition >= 0 && segmentPosition <= 1 && distance > farthestDistance) {
+              farthestDistance = distance;
+              intersection = { X: Math.round(cx + distance * dx), Y: Math.round(cy + distance * dy) };
+            }
+          }
+        }
+        if (intersection) return intersection;
+        const tx = dx === 0 ? Infinity : ((dx > 0 ? bounds.maxX : bounds.minX) - cx) / dx;
+        const ty = dy === 0 ? Infinity : ((dy > 0 ? bounds.maxY : bounds.minY) - cy) / dy;
+        const distance = Math.min(tx, ty);
+        return { X: Math.round(cx + dx * distance), Y: Math.round(cy + dy * distance) };
+      }
+
+      function makeCircle(center, radiusMm, count = 128) {
+        const radius = radiusMm * CLIPPER_SCALE;
+        const circle = [];
+        for (let i = 0; i < count; i++) {
+          const angle = i * 2 * Math.PI / count;
+          circle.push({ X: Math.round(center.X + Math.cos(angle) * radius), Y: Math.round(center.Y + Math.sin(angle) * radius) });
+        }
+        if (!ClipperLib.Clipper.Orientation(circle)) circle.reverse();
+        return circle;
+      }
+
+      function buildGeometry(settings) {
+        if (!activeFont) throw new Error("Bitte warte, bis die Schriftart geladen ist.");
+        const glyphs = activeFont.stringToGlyphs(settings.text);
+        if (!glyphs.length) throw new Error("Für diesen Text wurden keine Schriftzeichen gefunden.");
+        const glyphContours = [];
+        const fontScale = 1000 / activeFont.unitsPerEm;
+        let cursorX = 0;
+        for (let i = 0; i < glyphs.length; i++) {
+          const glyph = glyphs[i];
+          const path = glyph.getPath(cursorX, 0, 1000);
+          glyphContours.push(pathToContours(path.commands));
+          cursorX += glyph.advanceWidth * fontScale;
+          if (i < glyphs.length - 1) cursorX += activeFont.getKerningValue(glyph, glyphs[i + 1]) * fontScale;
+        }
+        const rawContours = glyphContours.flat();
+        if (!rawContours.length) throw new Error("Die Schriftart hat für diesen Text keine geschlossenen Konturen.");
+        const rawPoints = rawContours.flat();
+        const minX = Math.min(...rawPoints.map(p => p.x)), maxX = Math.max(...rawPoints.map(p => p.x));
+        const minY = Math.min(...rawPoints.map(p => p.y)), maxY = Math.max(...rawPoints.map(p => p.y));
+        const rawWidth = maxX - minX, rawHeight = maxY - minY;
+        const bossRadius = settings.holeDiameter / 2 + settings.holeWall;
+        const directionX = Math.cos(settings.angle * Math.PI / 180);
+        const directionY = -Math.sin(settings.angle * Math.PI / 180);
+        const leftPad = bossRadius + Math.max(0, -settings.holeDistance * directionX);
+        const rightPad = bossRadius + Math.max(0, settings.holeDistance * directionX);
+        const topPad = bossRadius + Math.max(0, -settings.holeDistance * directionY);
+        const bottomPad = bossRadius + Math.max(0, settings.holeDistance * directionY);
+        const availableWidth = settings.width - 2 * settings.margin - leftPad - rightPad;
+        const availableHeight = settings.height - 2 * settings.margin - topPad - bottomPad;
+        if (availableWidth < 5 || availableHeight < 5) throw new Error("Die Maße lassen mit diesem Rand und Loch keine ausreichend große Textfläche übrig.");
+
+        const trackingWidth = settings.letterSpacing * (glyphs.length - 1);
+        const fitScale = Math.min((availableWidth - trackingWidth) / rawWidth, availableHeight / rawHeight);
+        if (!Number.isFinite(fitScale) || fitScale <= 0) throw new Error("Der Zeichenabstand ist für die gewählten Maße zu groß.");
+        const textWidth = rawWidth * fitScale + trackingWidth, textHeight = rawHeight * fitScale;
+        const textLeft = leftPad + settings.margin + (availableWidth - textWidth) / 2;
+        const textTop = topPad + settings.margin + (availableHeight - textHeight) / 2;
+        const textContours = glyphContours.flatMap((contours, glyphIndex) => contours.map(contour => contour.map(point => ({
+          x: (point.x - minX) * fitScale + textLeft + glyphIndex * settings.letterSpacing,
+          y: (point.y - minY) * fitScale + textTop
+        }))));
+        const textPaths = textContours.map(toClipperPath);
+        const textUnion = booleanUnion(textPaths);
+        const externalContours = textUnion.filter(path => ClipperLib.Clipper.Orientation(path));
+        if (!externalContours.length) throw new Error("Die Außenkontur des Textes konnte nicht bestimmt werden.");
+
+        const offsetter = new ClipperLib.ClipperOffset(2, 0.05 * CLIPPER_SCALE);
+        offsetter.AddPaths(externalContours, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
+        const expandedTextPaths = new ClipperLib.Paths();
+        offsetter.Execute(expandedTextPaths, Math.round(settings.margin * CLIPPER_SCALE));
+        if (!expandedTextPaths.length) throw new Error("Der Rand konnte nicht um den Text gelegt werden.");
+        const expandedText = connectComponents(expandedTextPaths, Math.max(1, settings.margin * 0.75));
+        const boundaryPoint = pointOnBounds(expandedText, settings.angle);
+        const holeCenter = {
+          X: Math.round(boundaryPoint.X + directionX * settings.holeDistance * CLIPPER_SCALE),
+          Y: Math.round(boundaryPoint.Y + directionY * settings.holeDistance * CLIPPER_SCALE)
+        };
+        const boss = makeCircle(holeCenter, bossRadius);
+        const connectorStart = {
+          X: Math.round(boundaryPoint.X - directionX * 0.25 * CLIPPER_SCALE),
+          Y: Math.round(boundaryPoint.Y - directionY * 0.25 * CLIPPER_SCALE)
+        };
+        const connectorEnd = {
+          X: Math.round(holeCenter.X - directionX * Math.max(0, bossRadius - 0.25) * CLIPPER_SCALE),
+          Y: Math.round(holeCenter.Y - directionY * Math.max(0, bossRadius - 0.25) * CLIPPER_SCALE)
+        };
+        const connectorOffset = new ClipperLib.ClipperOffset(2, 0.05 * CLIPPER_SCALE);
+        connectorOffset.AddPath([connectorStart, connectorEnd], ClipperLib.JoinType.jtRound, ClipperLib.EndType.etOpenRound);
+        const connector = new ClipperLib.Paths();
+        connectorOffset.Execute(connector, Math.round(settings.holeWall * CLIPPER_SCALE));
+        const combined = connectComponents(booleanUnion([...expandedText, boss, ...connector]), Math.max(1, settings.margin * 0.75));
+
+        const partBounds = boundsOf(combined);
+        const partWidth = (partBounds.maxX - partBounds.minX) / CLIPPER_SCALE;
+        const partHeight = (partBounds.maxY - partBounds.minY) / CLIPPER_SCALE;
+        if (!partWidth || !partHeight) throw new Error("Die berechnete Außenkontur hat ungültige Maße.");
+        const outerContours = combined.map(path => path.map(point => ({ x: point.X / CLIPPER_SCALE, y: point.Y / CLIPPER_SCALE })));
+        return {
+          width: partWidth,
+          height: partHeight,
+          outerContours,
+          textContours: textContours,
+          hole: { x: holeCenter.X / CLIPPER_SCALE, y: holeCenter.Y / CLIPPER_SCALE, radius: settings.holeDiameter / 2 }
+        };
+      }
+
+      function pathData(contours) {
+        return contours.map(points => points.length
+          ? `M ${points.map(p => `${p.x.toFixed(3)} ${p.y.toFixed(3)}`).join(" L ")} Z`
+          : "").join(" ");
+      }
+
+      function renderPreview(geometry) {
+        const pad = Math.max(geometry.width, geometry.height) * 0.13;
+        const viewWidth = geometry.width + pad * 2, viewHeight = geometry.height + pad * 2;
+        const outer = pathData(geometry.outerContours);
+        const text = pathData(geometry.textContours);
+        $("preview").setAttribute("viewBox", `-${pad} -${pad} ${viewWidth} ${viewHeight}`);
+        $("preview").innerHTML = `
+          <path d="${outer}" fill="#d5f4e5" fill-rule="evenodd" stroke="#176b4c" stroke-width="${Math.max(0.18, geometry.width / 500)}" stroke-linejoin="round"/>
+          <path d="${text}" fill="none" stroke="#8b35d1" stroke-width="${Math.max(0.12, geometry.width / 900)}" stroke-linejoin="round"/>
+          <circle cx="${geometry.hole.x}" cy="${geometry.hole.y}" r="${geometry.hole.radius}" fill="white" stroke="#dc2626" stroke-width="${Math.max(0.18, geometry.width / 500)}"/>
+        `;
+        $("dimensionLabel").textContent = `${geometry.width.toFixed(1)} × ${geometry.height.toFixed(1)} mm`;
+      }
+
+      function dxfPair(code, value) { return `${code}\r\n${value}\r\n`; }
+
+      function addPolyline(points, layer) {
+        let entity = "";
+        entity += dxfPair(0, "POLYLINE");
+        entity += dxfPair(8, layer);
+        entity += dxfPair(66, 1);
+        entity += dxfPair(10, 0);
+        entity += dxfPair(20, 0);
+        entity += dxfPair(30, 0);
+        entity += dxfPair(70, 1);
+        for (const point of points) {
+          entity += dxfPair(0, "VERTEX");
+          entity += dxfPair(8, layer);
+          entity += dxfPair(10, point.x.toFixed(4));
+          entity += dxfPair(20, (Number(point.y) * -1).toFixed(4));
+          entity += dxfPair(30, 0);
+          entity += dxfPair(70, 0);
+        }
+        entity += dxfPair(0, "SEQEND");
+        entity += dxfPair(8, layer);
+        return entity;
+      }
+
+      function createDxf(geometry) {
+        let dxf = "";
+        dxf += dxfPair(0, "SECTION") + dxfPair(2, "HEADER");
+        dxf += dxfPair(9, "$ACADVER") + dxfPair(1, "AC1009");
+        dxf += dxfPair(999, "All drawing coordinates are in millimeters.");
+        dxf += dxfPair(0, "ENDSEC");
+        dxf += dxfPair(0, "SECTION") + dxfPair(2, "TABLES");
+        dxf += dxfPair(0, "TABLE") + dxfPair(2, "LTYPE") + dxfPair(70, 3);
+        for (const [name, description] of [["BYBLOCK", "ByBlock"], ["BYLAYER", "ByLayer"], ["CONTINUOUS", "Solid line"]]) {
+          dxf += dxfPair(0, "LTYPE") + dxfPair(2, name) + dxfPair(70, 0) + dxfPair(3, description) + dxfPair(72, 65) + dxfPair(73, 0) + dxfPair(40, 0);
+        }
+        dxf += dxfPair(0, "ENDTAB");
+        dxf += dxfPair(0, "TABLE") + dxfPair(2, "LAYER") + dxfPair(70, 3);
+        dxf += dxfPair(0, "LAYER") + dxfPair(2, "0") + dxfPair(70, 0) + dxfPair(62, 7) + dxfPair(6, "CONTINUOUS");
+        for (const [name, color] of [["CUT", 1], ["TEXT", 6]]) {
+          dxf += dxfPair(0, "LAYER") + dxfPair(2, name) + dxfPair(70, 0) + dxfPair(62, color) + dxfPair(6, "CONTINUOUS");
+        }
+        dxf += dxfPair(0, "ENDTAB") + dxfPair(0, "ENDSEC");
+        dxf += dxfPair(0, "SECTION") + dxfPair(2, "ENTITIES");
+        for (const contour of geometry.outerContours) dxf += addPolyline(contour, "CUT");
+        for (const contour of geometry.textContours) dxf += addPolyline(contour, "TEXT");
+        dxf += dxfPair(0, "CIRCLE") + dxfPair(8, "CUT");
+        dxf += dxfPair(10, geometry.hole.x.toFixed(4)) + dxfPair(20, (-geometry.hole.y).toFixed(4)) + dxfPair(30, 0);
+        dxf += dxfPair(40, geometry.hole.radius.toFixed(4));
+        dxf += dxfPair(0, "ENDSEC") + dxfPair(0, "EOF");
+        return dxf;
+      }
+
+      function polygonArea(points) {
+        let area = 0;
+        for (let i = 0; i < points.length; i++) {
+          const next = points[(i + 1) % points.length];
+          area += points[i].x * next.y - next.x * points[i].y;
+        }
+        return area / 2;
+      }
+
+      function isPointInsidePolygon(point, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const a = polygon[i], b = polygon[j];
+          if ((a.y > point.y) !== (b.y > point.y) &&
+              point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) {
+            inside = !inside;
+          }
+        }
+        return inside;
+      }
+
+      function contoursToShapes(THREE, contours) {
+        const nodes = contours
+          .filter(points => points.length >= 3)
+          .map(points => ({
+            points: points.map(point => ({ x: point.x, y: -point.y })),
+            area: Math.abs(polygonArea(points)),
+            parent: null,
+            depth: 0,
+            shape: null
+          }))
+          .sort((a, b) => b.area - a.area);
+
+        for (let i = 0; i < nodes.length; i++) {
+          const node = nodes[i];
+          let parent = null;
+          for (let j = 0; j < i; j++) {
+            const candidate = nodes[j];
+            if ((!parent || candidate.area < parent.area) &&
+                isPointInsidePolygon(node.points[0], candidate.points)) {
+              parent = candidate;
+            }
+          }
+          node.parent = parent;
+          node.depth = parent ? parent.depth + 1 : 0;
+        }
+
+        const makePath = (points, PathClass) => {
+          const path = new PathClass();
+          path.moveTo(points[0].x, points[0].y);
+          for (let i = 1; i < points.length; i++) path.lineTo(points[i].x, points[i].y);
+          path.closePath();
+          return path;
+        };
+        const shapes = [];
+        for (const node of nodes) {
+          if (node.depth % 2 === 0) {
+            node.shape = makePath(node.points, THREE.Shape);
+            shapes.push(node.shape);
+          } else {
+            let owner = node.parent;
+            while (owner && owner.depth % 2 !== 0) owner = owner.parent;
+            if (!owner || !owner.shape) throw new Error("Die Textinnenkonturen konnten nicht zugeordnet werden.");
+            owner.shape.holes.push(makePath(node.points, THREE.Path));
+          }
+        }
+        return shapes;
+      }
+
+      function readStlSettings() {
+        const partHeight = Number($("partHeight").value);
+        const textRaise = Number($("textRaise").value);
+        if (!Number.isFinite(partHeight) || partHeight < 1 || partHeight > 30) {
+          throw new Error("Die Bauteilhöhe muss zwischen 1 und 30 mm liegen.");
+        }
+        if (!Number.isFinite(textRaise) || textRaise < 0.2 || textRaise > 10) {
+          throw new Error("Die Texterhöhung muss zwischen 0,2 und 10 mm liegen.");
+        }
+        return { partHeight, textRaise };
+      }
+
+      async function createStl(geometry, settings) {
+        stlModulesPromise ||= Promise.all([
+          import("three"),
+          import("three/addons/exporters/STLExporter.js")
+        ]).catch(error => {
+          stlModulesPromise = null;
+          throw new Error(`Die 3D-Bibliothek konnte nicht geladen werden: ${error.message}`);
+        });
+        const [THREE, { STLExporter }] = await stlModulesPromise;
+        const scene = new THREE.Scene();
+        const material = new THREE.MeshBasicMaterial();
+        const createMesh = geometry => {
+          const triangles = geometry.index ? geometry.toNonIndexed() : geometry;
+          const positions = triangles.getAttribute("position");
+          const filtered = [];
+          for (let i = 0; i < positions.count; i += 3) {
+            const ax = positions.getX(i), ay = positions.getY(i), az = positions.getZ(i);
+            const abx = positions.getX(i + 1) - ax, aby = positions.getY(i + 1) - ay, abz = positions.getZ(i + 1) - az;
+            const acx = positions.getX(i + 2) - ax, acy = positions.getY(i + 2) - ay, acz = positions.getZ(i + 2) - az;
+            const nx = aby * acz - abz * acy, ny = abz * acx - abx * acz, nz = abx * acy - aby * acx;
+            if (nx * nx + ny * ny + nz * nz > 1e-16) {
+              for (let vertex = 0; vertex < 3; vertex++) {
+                filtered.push(positions.getX(i + vertex), positions.getY(i + vertex), positions.getZ(i + vertex));
+              }
+            }
+          }
+          if (filtered.length !== positions.count * 3) {
+            const cleanGeometry = new THREE.BufferGeometry();
+            cleanGeometry.setAttribute("position", new THREE.Float32BufferAttribute(filtered, 3));
+            cleanGeometry.computeVertexNormals();
+            return new THREE.Mesh(cleanGeometry, material);
+          }
+          return new THREE.Mesh(geometry, material);
+        };
+        const bodyContours = [...geometry.outerContours];
+        const holeContour = [];
+        for (let i = 0; i < 128; i++) {
+          const angle = i * 2 * Math.PI / 128;
+          holeContour.push({
+            x: geometry.hole.x + Math.cos(angle) * geometry.hole.radius,
+            y: geometry.hole.y + Math.sin(angle) * geometry.hole.radius
+          });
+        }
+        bodyContours.push(holeContour);
+
+        for (const shape of contoursToShapes(THREE, bodyContours)) {
+          const body = new THREE.ExtrudeGeometry(shape, {
+            depth: settings.partHeight,
+            bevelEnabled: false,
+            steps: 1
+          });
+          scene.add(createMesh(body));
+        }
+        const textUnion = booleanUnion(geometry.textContours.map(toClipperPath));
+        const textContours = textUnion.map(path => path.map(point => ({
+          x: point.X / CLIPPER_SCALE,
+          y: point.Y / CLIPPER_SCALE
+        })));
+        for (const shape of contoursToShapes(THREE, textContours)) {
+          const text = new THREE.ExtrudeGeometry(shape, {
+            depth: settings.textRaise + 0.01,
+            bevelEnabled: false,
+            steps: 1
+          });
+          text.translate(0, 0, settings.partHeight - 0.01);
+          scene.add(createMesh(text));
+        }
+        return new STLExporter().parse(scene, { binary: true });
+      }
+
+      function downloadBlob(blob, extension) {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        const name = $("textInput").value.trim().toLowerCase()
+          .replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "schluesselanhaenger";
+        anchor.download = `${name}.${extension}`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      function scheduleRender() {
+        window.clearTimeout(renderTimer);
+        latestGeometry = null;
+        $("downloadButton").disabled = true;
+        $("stlButton").disabled = true;
+        renderTimer = window.setTimeout(() => {
+          try {
+            const settings = readSettings();
+            $("angleLabel").textContent = `${settings.angle}°`;
+            latestGeometry = buildGeometry(settings);
+            renderPreview(latestGeometry);
+            $("downloadButton").disabled = false;
+            $("stlButton").disabled = false;
+            setMessage(`Bereit${activeFontName ? ` · Schrift: ${activeFontName}` : ""}.`);
+          } catch (error) {
+            latestGeometry = null;
+            $("downloadButton").disabled = true;
+            $("stlButton").disabled = true;
+            setMessage(error.message || "Die Vorschau konnte nicht erstellt werden.", true);
+          }
+        }, 100);
+      }
+
+      for (const id of controls) $(id).addEventListener("input", scheduleRender);
+      $("fontSelect").addEventListener("change", async (event) => {
+        if (event.target.value === "upload") {
+          $("fontFile").classList.remove("hidden");
+          $("fontFile").click();
+          return;
+        }
+        $("fontFile").classList.add("hidden");
+        latestGeometry = null;
+        $("downloadButton").disabled = true;
+        $("stlButton").disabled = true;
+        try {
+          await loadPresetFont(event.target.value);
+          scheduleRender();
+        } catch (error) {
+          activeFont = null;
+          $("downloadButton").disabled = true;
+          $("stlButton").disabled = true;
+          $("fontStatus").textContent = "Schriftart konnte nicht geladen werden.";
+          setMessage(error.message, true);
+        }
+      });
+      $("fontFile").addEventListener("change", event => loadUploadedFont(event.target.files[0]));
+      $("downloadButton").addEventListener("click", () => {
+        if (!latestGeometry) return;
+        const data = createDxf(latestGeometry);
+        downloadBlob(new Blob([data], { type: "application/dxf;charset=utf-8" }), "dxf");
+      });
+      $("stlButton").addEventListener("click", async () => {
+        if (!latestGeometry) return;
+        const button = $("stlButton");
+        button.disabled = true;
+        try {
+          const stlSettings = readStlSettings();
+          const data = await createStl(latestGeometry, stlSettings);
+          downloadBlob(new Blob([data], { type: "model/stl" }), "stl");
+          setMessage(`STL erstellt · Gesamthöhe ${(stlSettings.partHeight + stlSettings.textRaise).toFixed(1)} mm.`);
+        } catch (error) {
+          setMessage(error.message || "Die STL-Datei konnte nicht erstellt werden.", true);
+        } finally {
+          button.disabled = !latestGeometry;
+        }
+      });
+
+      loadPresetFont("lobster").then(scheduleRender).catch(error => {
+        $("fontStatus").textContent = "Schriftart konnte nicht geladen werden.";
+        setMessage(error.message, true);
+      });
+    })();
+  </script>
+</body>
+</html>
