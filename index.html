@@ -25,6 +25,9 @@
     .btn-primary:hover { background: #047857; }
     .btn-primary:disabled { opacity: .5; cursor: wait; }
     .preview-grid { background-color: #fff; background-image: linear-gradient(#e8efec 1px, transparent 1px), linear-gradient(90deg, #e8efec 1px, transparent 1px); background-size: 20px 20px; }
+    .svg-area-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .svg-area-table th, .svg-area-table td { padding: .55rem .35rem; border-bottom: 1px solid #e2e8e5; text-align: left; }
+    .svg-area-table input[type="number"] { width: 5.5rem; padding: .35rem; border: 1px solid #d8e4df; border-radius: .4rem; }
     input[type="range"] { accent-color: #059669; }
     @media (min-width: 1024px) {
       .preview-panel { position: sticky; top: 1rem; align-self: start; }
@@ -55,7 +58,7 @@
     <header class="mb-7">
       <p class="text-sm font-semibold tracking-widest uppercase text-green-700">DXF- &amp; STL-Generator</p>
       <h1 class="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">Dein Schlüsselanhänger</h1>
-      <p class="mt-2 text-gray-600">Text eingeben, Maße in Millimetern festlegen und eine DXF- oder STL-Datei für CAD, CNC, Laser oder 3D-Druck herunterladen.</p>
+      <p class="mt-2 text-gray-600">Text eingeben oder SVG-Flächen importieren, Maße festlegen und eine DXF- oder STL-Datei für CAD, CNC oder 3D-Druck herunterladen.</p>
     </header>
 
     <div class="generator-grid grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -63,14 +66,14 @@
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-lg font-semibold">Vorschau</h2>
-            <p class="text-sm text-gray-500">Außenkontur und Textkonturen</p>
+            <p id="previewDescription" class="text-sm text-gray-500">Außenkontur und Textkonturen</p>
           </div>
           <span id="dimensionLabel" class="text-sm text-gray-600"></span>
         </div>
         <div class="preview-grid rounded-xl border border-gray-200 overflow-hidden min-h-64 flex items-center justify-center p-5">
           <svg id="preview" viewBox="0 0 900 420" class="w-full max-h-96" role="img" aria-label="Vorschau des Schlüsselanhängers"></svg>
         </div>
-        <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-600">
+        <div id="previewLegend" class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-600">
           <span class="inline-flex items-center"><i class="w-3 h-3 rounded-sm bg-green-200 border border-green-700 mr-2"></i>Bauteil / Außenkontur</span>
           <span class="inline-flex items-center"><i class="w-3 h-3 border-2 border-purple-600 mr-2"></i>Textkonturen (Layer TEXT)</span>
           <span class="inline-flex items-center"><i class="w-3 h-3 rounded-full border-2 border-red-600 mr-2"></i>Befestigungsloch</span>
@@ -79,7 +82,23 @@
 
       <section class="panel settings-panel lg:col-span-2 p-5 sm:p-6" aria-label="Einstellungen">
         <h2 class="text-lg font-semibold mb-5">Einstellungen</h2>
-        <div class="space-y-5">
+        <div class="space-y-5 mb-5">
+          <div>
+            <label class="label" for="svgFile">SVG-Datei importieren</label>
+            <input class="field" id="svgFile" type="file" accept=".svg,image/svg+xml">
+            <p id="svgStatus" class="mt-1 text-xs text-gray-500" aria-live="polite">Geschlossene Pfade, Polygone, Rechtecke, Kreise und Ellipsen werden erkannt; offene Pfade ignoriert.</p>
+            <div id="svgAreas" class="hidden mt-3 overflow-x-auto">
+              <table class="svg-area-table">
+                <thead><tr><th>Fläche</th><th>Extrusion (mm)</th><th>Aktiv</th></tr></thead>
+                <tbody id="svgAreaRows"></tbody>
+              </table>
+              <p class="mt-2 text-xs text-gray-500">Die STL enthält alle aktivierten Flächen. STL speichert keine Farben; diese sind in der Vorschau sichtbar.</p>
+            </div>
+            <button id="textModeButton" class="hidden mt-3 text-sm font-semibold text-green-700" type="button">Zurück zum Text-Generator</button>
+          </div>
+        </div>
+
+        <div id="textSettings" class="space-y-5">
           <div>
             <label class="label" for="textInput">Text</label>
             <input class="field text-lg" id="textInput" type="text" maxlength="40" value="Example" autocomplete="off">
@@ -168,8 +187,8 @@
           <button id="downloadButton" class="btn-primary rounded-lg py-3 px-4 font-semibold transition" type="button" disabled>DXF herunterladen</button>
           <button id="stlButton" class="btn-primary rounded-lg py-3 px-4 font-semibold transition" type="button" disabled>STL herunterladen</button>
         </div>
-        <p class="mt-3 text-xs text-gray-500">AutoCAD-R12-DXF · Koordinaten in mm · Layer <code>CUT</code> für Kontur/Loch, Layer <code>TEXT</code> für Textkonturen.</p>
-        <p class="mt-2 text-xs text-gray-500">STL: Bauteil mit durchgehendem Befestigungsloch und erhabenem Text; beide Höhen sind in mm.</p>
+        <p id="dxfHelp" class="mt-3 text-xs text-gray-500">AutoCAD-R12-DXF · Koordinaten in mm · Layer <code>CUT</code> für Kontur/Loch, Layer <code>TEXT</code> für Textkonturen.</p>
+        <p id="stlHelp" class="mt-2 text-xs text-gray-500">STL: Bauteil mit durchgehendem Befestigungsloch und erhabenem Text; beide Höhen sind in mm.</p>
       </section>
     </div>
 
@@ -194,6 +213,9 @@
       let renderTimer = 0;
       let latestGeometry = null;
       let stlModulesPromise = null;
+      let svgFeatures = [];
+      let svgMode = false;
+      let svgFilename = "";
 
       function setMessage(text, isError = false) {
         const node = $("message");
@@ -516,6 +538,299 @@
           <circle cx="${geometry.hole.x}" cy="${geometry.hole.y}" r="${geometry.hole.radius}" fill="white" stroke="#dc2626" stroke-width="${Math.max(0.18, geometry.width / 500)}"/>
         `;
         $("dimensionLabel").textContent = `${geometry.width.toFixed(1)} × ${geometry.height.toFixed(1)} mm`;
+        $("previewDescription").textContent = "Außenkontur und Textkonturen";
+        $("previewLegend").classList.remove("hidden");
+        $("dxfHelp").innerHTML = 'AutoCAD-R12-DXF · Koordinaten in mm · Layer <code>CUT</code> für Kontur/Loch, Layer <code>TEXT</code> für Textkonturen.';
+        $("stlHelp").textContent = "STL: Bauteil mit durchgehendem Befestigungsloch und erhabenem Text; beide Höhen sind in mm.";
+      }
+
+      function renderSvgPreview(geometry) {
+        const pad = Math.max(geometry.width, geometry.height) * 0.06;
+        $("preview").setAttribute("viewBox", `${-pad} ${-pad} ${geometry.width + pad * 2} ${geometry.height + pad * 2}`);
+        $("preview").innerHTML = geometry.svgFeatures.map(feature =>
+          `<path d="${pathData(feature.contours)}" fill="${feature.color}" fill-opacity=".72" fill-rule="evenodd" stroke="${feature.color}" stroke-width="${Math.max(0.12, geometry.width / 800)}" stroke-linejoin="round"/>`
+        ).join("");
+        $("dimensionLabel").textContent = `${geometry.width.toFixed(1)} × ${geometry.height.toFixed(1)} mm`;
+        $("previewDescription").textContent = "Erkannte geschlossene SVG-Flächen";
+        $("previewLegend").classList.add("hidden");
+        $("dxfHelp").textContent = "DXF enthält die Konturen aller erkannten SVG-Flächen auf dem Layer CUT.";
+        $("stlHelp").textContent = "STL extrudiert die aktivierten Flächen jeweils mit der in der Tabelle festgelegten Höhe.";
+      }
+
+      function svgColor(index) {
+        return `hsl(${Math.round(index * 137.508 % 360)} 70% 58%)`;
+      }
+
+      function renderSvgAreaTable() {
+        const rows = $("svgAreaRows");
+        rows.replaceChildren();
+        svgFeatures.forEach((feature, index) => {
+          const row = document.createElement("tr");
+          const nameCell = document.createElement("td");
+          const swatch = document.createElement("span");
+          swatch.style.cssText = `display:inline-block;width:.75rem;height:.75rem;border-radius:50%;background:${feature.color};margin-right:.45rem;vertical-align:middle`;
+          nameCell.append(swatch, document.createTextNode(feature.name));
+          const heightCell = document.createElement("td");
+          const heightInput = document.createElement("input");
+          heightInput.type = "number";
+          heightInput.min = "0.2";
+          heightInput.max = "30";
+          heightInput.step = "0.2";
+          heightInput.value = String(feature.height);
+          heightInput.setAttribute("aria-label", `Extrusionshöhe für ${feature.name} in Millimetern`);
+          heightInput.dataset.featureIndex = String(index);
+          heightCell.append(heightInput);
+          const activeCell = document.createElement("td");
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = feature.selected;
+          checkbox.setAttribute("aria-label", `${feature.name} extrudieren`);
+          checkbox.dataset.featureIndex = String(index);
+          activeCell.append(checkbox);
+          row.append(nameCell, heightCell, activeCell);
+          rows.append(row);
+        });
+        $("svgAreas").classList.toggle("hidden", svgFeatures.length === 0);
+        updateExportButtons();
+      }
+
+      function updateExportButtons() {
+        $("downloadButton").disabled = !latestGeometry;
+        $("stlButton").disabled = !latestGeometry || (svgMode && !svgFeatures.some(feature => feature.selected));
+      }
+
+      function svgShapeElements(node, result = []) {
+        const supported = new Set(["path", "polygon", "rect", "circle", "ellipse"]);
+        if (node.nodeType === Node.ELEMENT_NODE && supported.has(node.localName)) result.push(node);
+        for (const child of node.children || []) svgShapeElements(child, result);
+        return result;
+      }
+
+      function splitSvgPathData(data) {
+        const tokens = data.match(/[a-df-zA-DF-Z]|[-+]?(?:\d*\.)?\d+(?:[eE][-+]?\d+)?/g) || [];
+        const segments = [];
+        let current = [];
+        for (const token of tokens) {
+          if (/^[mM]$/.test(token) && current.length) {
+            segments.push(current);
+            current = [];
+          }
+          current.push(token);
+        }
+        if (current.length) segments.push(current);
+        return segments.map(tokensForSegment => ({
+          data: tokensForSegment.join(" "),
+          explicitlyClosed: tokensForSegment.some(token => /^[zZ]$/.test(token))
+        }));
+      }
+
+      function copySvgTree(source, targetDocument) {
+        const allowed = new Set(["svg", "g", "path", "polygon", "rect", "circle", "ellipse"]);
+        const geometryAttributes = new Set(["d", "points", "x", "y", "width", "height", "rx", "ry", "cx", "cy", "r", "viewBox", "preserveAspectRatio", "id", "aria-label"]);
+        const copyNode = sourceNode => {
+          if (sourceNode.nodeType !== Node.ELEMENT_NODE || !allowed.has(sourceNode.localName)) return null;
+          const copy = targetDocument.createElementNS("http://www.w3.org/2000/svg", sourceNode.localName);
+          for (const attribute of sourceNode.attributes) {
+            if (attribute.name === "transform" || attribute.name === "fill-rule" || geometryAttributes.has(attribute.name)) {
+              copy.setAttribute(attribute.name, attribute.value);
+            }
+          }
+          for (const child of sourceNode.children) {
+            const childCopy = copyNode(child);
+            if (childCopy) copy.append(childCopy);
+          }
+          return copy;
+        };
+        return copyNode(source);
+      }
+
+      function sampleSvgElement(element, matrix) {
+        const length = element.getTotalLength();
+        if (!Number.isFinite(length) || length <= 0) return [];
+        const count = Math.min(2000, Math.max(12, Math.ceil(length / 1.5)));
+        const points = [];
+        for (let i = 0; i < count; i++) {
+          const point = element.getPointAtLength(length * i / count);
+          const transformed = new DOMPoint(point.x, point.y).matrixTransform(matrix);
+          points.push({ x: transformed.x, y: transformed.y });
+        }
+        return points;
+      }
+
+      function splitSvgAreas(contours, name) {
+        const nodes = contours.map(contour => ({
+          contour,
+          area: Math.abs(polygonArea(contour)),
+          parent: null,
+          depth: 0
+        })).sort((a, b) => b.area - a.area);
+        for (let i = 0; i < nodes.length; i++) {
+          const node = nodes[i];
+          for (let j = 0; j < i; j++) {
+            const candidate = nodes[j];
+            if ((!node.parent || candidate.area < node.parent.area) &&
+                isPointInsidePolygon(node.contour[0], candidate.contour)) {
+              node.parent = candidate;
+            }
+          }
+          node.depth = node.parent ? node.parent.depth + 1 : 0;
+        }
+        const areaNodes = nodes.filter(node => node.depth % 2 === 0);
+        return areaNodes.map((node, index) => ({
+          name: areaNodes.length > 1 ? `${name} ${index + 1}` : name,
+          sourceContours: [
+            node.contour,
+            ...nodes.filter(candidate => candidate.parent === node && candidate.depth % 2 === 1).map(candidate => candidate.contour)
+          ]
+        }));
+      }
+
+      function parseSvgFile(text) {
+        const parser = new DOMParser();
+        const source = parser.parseFromString(text, "image/svg+xml");
+        if (source.querySelector("parsererror") || source.documentElement.localName !== "svg") {
+          throw new Error("Die ausgewählte Datei enthält kein gültiges SVG.");
+        }
+        const sourceRoot = source.documentElement;
+        let viewBox = sourceRoot.getAttribute("viewBox");
+        if (!viewBox) {
+          const parseLength = value => {
+            const match = value && value.trim().match(/^(\d+(?:\.\d+)?|\.\d+)/);
+            return match ? Number(match[0]) : NaN;
+          };
+          const width = parseLength(sourceRoot.getAttribute("width"));
+          const height = parseLength(sourceRoot.getAttribute("height"));
+          if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+            throw new Error("Das SVG braucht eine gültige viewBox oder numerische Breite und Höhe.");
+          }
+          viewBox = `0 0 ${width} ${height}`;
+        }
+        const bounds = viewBox.trim().split(/[\s,]+/).map(Number);
+        if (bounds.length !== 4 || bounds.some(value => !Number.isFinite(value)) || bounds[2] <= 0 || bounds[3] <= 0) {
+          throw new Error("Die viewBox des SVG ist ungültig.");
+        }
+
+        const sanitized = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        sanitized.setAttribute("viewBox", viewBox);
+        sanitized.setAttribute("width", "1000");
+        sanitized.setAttribute("height", "1000");
+        if (sourceRoot.hasAttribute("transform")) sanitized.setAttribute("transform", sourceRoot.getAttribute("transform"));
+        for (const child of sourceRoot.children) {
+          const copied = copySvgTree(child, document);
+          if (copied) sanitized.append(copied);
+        }
+        sanitized.style.cssText = "position:fixed;left:-2000px;top:0;width:1000px;height:1000px;visibility:hidden;overflow:hidden";
+        document.body.append(sanitized);
+        try {
+          const allShapes = svgShapeElements(sanitized);
+          const features = [];
+          for (const element of allShapes) {
+            if (element.localName === "path") {
+              const segments = splitSvgPathData(element.getAttribute("d") || "");
+              const closedContours = [];
+              for (const segment of segments) {
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", segment.data);
+                element.parentNode.insertBefore(path, element);
+                try {
+                  const length = path.getTotalLength();
+                  if (!Number.isFinite(length) || length <= 0) continue;
+                  const start = path.getPointAtLength(0);
+                  const end = path.getPointAtLength(length);
+                  const isClosed = segment.explicitlyClosed || Math.hypot(start.x - end.x, start.y - end.y) <= Math.max(0.01, length * 1e-5);
+                  if (isClosed) {
+                    const matrix = path.getCTM();
+                    if (matrix) {
+                      const contour = sampleSvgElement(path, matrix);
+                      if (contour.length >= 3) closedContours.push(contour);
+                    }
+                  }
+                } finally {
+                  path.remove();
+                }
+              }
+              if (closedContours.length) {
+                const name = element.getAttribute("aria-label") || element.id || `Pfad ${features.length + 1}`;
+                features.push(...splitSvgAreas(closedContours, name));
+              }
+            } else {
+              const matrix = element.getCTM();
+              if (!matrix) continue;
+              const contour = sampleSvgElement(element, matrix);
+              if (contour.length >= 3) {
+                features.push({ name: element.getAttribute("aria-label") || element.id || `Fläche ${features.length + 1}`, sourceContours: [contour] });
+              }
+            }
+          }
+          if (!features.length) {
+            throw new Error("Im SVG wurden keine geschlossenen Flächen gefunden. Unterstützt werden Pfade, Polygone, Rechtecke, Kreise und Ellipsen.");
+          }
+          return features;
+        } finally {
+          sanitized.remove();
+        }
+      }
+
+      function buildSvgGeometry() {
+        const width = Number($("widthInput").value);
+        const height = Number($("heightInput").value);
+        if (!Number.isFinite(width) || width < 20 || width > 250) throw new Error("Die Gesamtbreite muss zwischen 20 und 250 mm liegen.");
+        if (!Number.isFinite(height) || height < 15 || height > 150) throw new Error("Die Gesamthöhe muss zwischen 15 und 150 mm liegen.");
+        const allPoints = svgFeatures.flatMap(feature => feature.sourceContours.flat());
+        if (!allPoints.length) throw new Error("Das SVG enthält keine verwendbaren Flächen.");
+        const minX = Math.min(...allPoints.map(point => point.x));
+        const maxX = Math.max(...allPoints.map(point => point.x));
+        const minY = Math.min(...allPoints.map(point => point.y));
+        const maxY = Math.max(...allPoints.map(point => point.y));
+        const sourceWidth = maxX - minX, sourceHeight = maxY - minY;
+        if (sourceWidth <= 0 || sourceHeight <= 0) throw new Error("Die SVG-Flächen haben ungültige Abmessungen.");
+        const scale = Math.min(width / sourceWidth, height / sourceHeight);
+        const features = svgFeatures.map(feature => ({
+          ...feature,
+          contours: feature.sourceContours.map(contour => contour.map(point => ({
+            x: (point.x - minX) * scale,
+            y: (point.y - minY) * scale
+          })))
+        }));
+        return { kind: "svg", width: sourceWidth * scale, height: sourceHeight * scale, svgFeatures: features };
+      }
+
+      async function loadSvgFile(file) {
+        if (!file) return;
+        const previousGeometry = latestGeometry;
+        const previousFeatures = svgFeatures;
+        const previousMode = svgMode;
+        const previousFilename = svgFilename;
+        latestGeometry = null;
+        $("downloadButton").disabled = true;
+        $("stlButton").disabled = true;
+        $("svgStatus").textContent = `Lese ${file.name} …`;
+        try {
+          const text = await file.text();
+          svgFeatures = parseSvgFile(text).map((feature, index) => ({
+            ...feature,
+            color: svgColor(index),
+            selected: true,
+            height: Number($("partHeight").value) || 3
+          }));
+          svgMode = true;
+          svgFilename = file.name.replace(/\.svg$/i, "");
+          $("textSettings").classList.add("hidden");
+          $("textModeButton").classList.remove("hidden");
+          $("svgStatus").textContent = `${file.name}: ${svgFeatures.length} geschlossene Fläche(n) erkannt.`;
+          renderSvgAreaTable();
+          scheduleRender();
+        } catch (error) {
+          latestGeometry = previousGeometry;
+          svgFeatures = previousFeatures;
+          svgMode = previousMode;
+          svgFilename = previousFilename;
+          $("textSettings").classList.toggle("hidden", svgMode);
+          $("textModeButton").classList.toggle("hidden", !svgMode);
+          renderSvgAreaTable();
+          $("svgStatus").textContent = "SVG konnte nicht verarbeitet werden.";
+          setMessage(error.message || "Die SVG-Datei konnte nicht gelesen werden.", true);
+        }
       }
 
       function dxfPair(code, value) { return `${code}\r\n${value}\r\n`; }
@@ -561,11 +876,17 @@
         }
         dxf += dxfPair(0, "ENDTAB") + dxfPair(0, "ENDSEC");
         dxf += dxfPair(0, "SECTION") + dxfPair(2, "ENTITIES");
-        for (const contour of geometry.outerContours) dxf += addPolyline(contour, "CUT");
-        for (const contour of geometry.textContours) dxf += addPolyline(contour, "TEXT");
-        dxf += dxfPair(0, "CIRCLE") + dxfPair(8, "CUT");
-        dxf += dxfPair(10, geometry.hole.x.toFixed(4)) + dxfPair(20, (-geometry.hole.y).toFixed(4)) + dxfPair(30, 0);
-        dxf += dxfPair(40, geometry.hole.radius.toFixed(4));
+        if (geometry.kind === "svg") {
+          for (const feature of geometry.svgFeatures) {
+            for (const contour of feature.contours) dxf += addPolyline(contour, "CUT");
+          }
+        } else {
+          for (const contour of geometry.outerContours) dxf += addPolyline(contour, "CUT");
+          for (const contour of geometry.textContours) dxf += addPolyline(contour, "TEXT");
+          dxf += dxfPair(0, "CIRCLE") + dxfPair(8, "CUT");
+          dxf += dxfPair(10, geometry.hole.x.toFixed(4)) + dxfPair(20, (-geometry.hole.y).toFixed(4)) + dxfPair(30, 0);
+          dxf += dxfPair(40, geometry.hole.radius.toFixed(4));
+        }
         dxf += dxfPair(0, "ENDSEC") + dxfPair(0, "EOF");
         return dxf;
       }
@@ -685,6 +1006,23 @@
           }
           return new THREE.Mesh(geometry, material);
         };
+        if (geometry.kind === "svg") {
+          for (const feature of geometry.svgFeatures.filter(item => item.selected)) {
+            if (!Number.isFinite(feature.height) || feature.height < 0.2 || feature.height > 30) {
+              throw new Error(`Die Extrusionshöhe für „${feature.name}“ muss zwischen 0,2 und 30 mm liegen.`);
+            }
+            const shapes = contoursToShapes(THREE, feature.contours);
+            for (const shape of shapes) {
+              const solid = new THREE.ExtrudeGeometry(shape, {
+                depth: feature.height,
+                bevelEnabled: false,
+                steps: 1
+              });
+              scene.add(createMesh(solid));
+            }
+          }
+          return new STLExporter().parse(scene, { binary: true });
+        }
         const bodyContours = [...geometry.outerContours];
         const holeContour = [];
         for (let i = 0; i < 128; i++) {
@@ -721,11 +1059,11 @@
         return new STLExporter().parse(scene, { binary: true });
       }
 
-      function downloadBlob(blob, extension) {
+      function downloadBlob(blob, extension, baseName = "") {
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
-        const name = $("textInput").value.trim().toLowerCase()
+        const name = (baseName || $("textInput").value).trim().toLowerCase()
           .replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "schluesselanhaenger";
         anchor.download = `${name}.${extension}`;
         document.body.appendChild(anchor);
@@ -741,6 +1079,13 @@
         $("stlButton").disabled = true;
         renderTimer = window.setTimeout(() => {
           try {
+            if (svgMode) {
+              latestGeometry = buildSvgGeometry();
+              renderSvgPreview(latestGeometry);
+              updateExportButtons();
+              setMessage(`SVG bereit · ${svgFeatures.filter(feature => feature.selected).length} Fläche(n) zum Extrudieren ausgewählt.`);
+              return;
+            }
             const settings = readSettings();
             $("angleLabel").textContent = `${settings.angle}°`;
             latestGeometry = buildGeometry(settings);
@@ -758,6 +1103,36 @@
       }
 
       for (const id of controls) $(id).addEventListener("input", scheduleRender);
+      $("svgFile").addEventListener("change", event => {
+        const file = event.target.files[0];
+        event.target.value = "";
+        loadSvgFile(file);
+      });
+      $("textModeButton").addEventListener("click", () => {
+        svgMode = false;
+        svgFeatures = [];
+        svgFilename = "";
+        latestGeometry = null;
+        $("textSettings").classList.remove("hidden");
+        $("textModeButton").classList.add("hidden");
+        $("svgAreas").classList.add("hidden");
+        $("svgStatus").textContent = "Geschlossene Pfade, Polygone, Rechtecke, Kreise und Ellipsen werden erkannt; offene Pfade ignoriert.";
+        scheduleRender();
+      });
+      $("svgAreaRows").addEventListener("input", event => {
+        const index = Number(event.target.dataset.featureIndex);
+        if (!Number.isInteger(index) || !svgFeatures[index]) return;
+        if (event.target.type === "number") {
+          svgFeatures[index].height = Number(event.target.value);
+          if (latestGeometry?.kind === "svg") latestGeometry.svgFeatures[index].height = svgFeatures[index].height;
+        } else if (event.target.type === "checkbox") {
+          svgFeatures[index].selected = event.target.checked;
+          if (latestGeometry?.kind === "svg") latestGeometry.svgFeatures[index].selected = svgFeatures[index].selected;
+        }
+        updateExportButtons();
+        const selected = svgFeatures.filter(feature => feature.selected).length;
+        setMessage(`SVG bereit · ${selected} Fläche(n) zum Extrudieren ausgewählt.`);
+      });
       $("fontSelect").addEventListener("change", async (event) => {
         if (event.target.value === "upload") {
           $("fontFile").classList.remove("hidden");
@@ -783,21 +1158,23 @@
       $("downloadButton").addEventListener("click", () => {
         if (!latestGeometry) return;
         const data = createDxf(latestGeometry);
-        downloadBlob(new Blob([data], { type: "application/dxf;charset=utf-8" }), "dxf");
+        downloadBlob(new Blob([data], { type: "application/dxf;charset=utf-8" }), "dxf", svgMode ? svgFilename : "");
       });
       $("stlButton").addEventListener("click", async () => {
         if (!latestGeometry) return;
         const button = $("stlButton");
         button.disabled = true;
         try {
-          const stlSettings = readStlSettings();
+          const stlSettings = svgMode ? {} : readStlSettings();
           const data = await createStl(latestGeometry, stlSettings);
-          downloadBlob(new Blob([data], { type: "model/stl" }), "stl");
-          setMessage(`STL erstellt · Gesamthöhe ${(stlSettings.partHeight + stlSettings.textRaise).toFixed(1)} mm.`);
+          downloadBlob(new Blob([data], { type: "model/stl" }), "stl", svgMode ? svgFilename : "");
+          setMessage(svgMode
+            ? `STL mit ${svgFeatures.filter(feature => feature.selected).length} extrudierten Fläche(n) erstellt.`
+            : `STL erstellt · Gesamthöhe ${(stlSettings.partHeight + stlSettings.textRaise).toFixed(1)} mm.`);
         } catch (error) {
           setMessage(error.message || "Die STL-Datei konnte nicht erstellt werden.", true);
         } finally {
-          button.disabled = !latestGeometry;
+          updateExportButtons();
         }
       });
 
